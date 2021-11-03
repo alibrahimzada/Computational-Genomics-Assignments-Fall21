@@ -1,5 +1,7 @@
 import argparse
 import numpy as np
+import time
+import copy
 
 def generate_data(args):
     implanted_motif = np.random.choice(a=['a', 'c', 'g', 't'], size=args.l)
@@ -97,16 +99,17 @@ def get_score(motifs):
 
 def randomized_motif_search(dna, args):
     random_index = np.random.choice(args.n-args.k+1, 1)[0]
-    best_motifs = [dna_str[random_index:random_index+args.k] for dna_str in dna]
+    motifs = [dna_str[random_index:random_index+args.k] for dna_str in dna]
+    best_motifs = copy.copy(motifs)
 
     while True:
-        profile = get_profile(best_motifs)
+        profile = get_profile(motifs)
         motifs = get_likely_motifs(profile, dna, args)
 
-        if get_score(motifs) > get_score(best_motifs):
-            best_motifs = motifs
+        if get_score(motifs) < get_score(best_motifs):
+            best_motifs = copy.copy(motifs)
         else:
-            return best_motifs
+            return best_motifs, get_score(best_motifs)
 
 def main(args):
     if args.generate_data == 'True':
@@ -114,13 +117,31 @@ def main(args):
 
     dna_strings = read_data(args)
 
+    scores = []
+    best_motifs = {}
+    running_time = []
     for iter in np.arange(args.total_iter):
+        start = time.time()
         if args.algorithm == 'randomized':
-            best_motifs = randomized_motif_search(dna_strings, args)
-            for m in best_motifs:
-                print(m)
+            motifs, score = randomized_motif_search(dna_strings, args)
+            scores.append(score)
+            best_motifs.setdefault('best motif', [0, 100])
+            if score < best_motifs['best motif'][1]:
+                best_motifs['best motif'][0] = motifs
+                best_motifs['best motif'][1] = score
 
-        break
+        
+        elif args.algorithm == 'gibbs':
+            pass
+
+        end = time.time()
+        running_time.append(end - start)
+
+    print('max score: {}\naverage score: {}\nbest score: {}'.format(max(scores), np.mean(scores), min(scores)))
+    print('score: {}\nbest motifs: '.format(best_motifs['best motif'][1]))
+    for motif in best_motifs['best motif'][0]:
+        print(motif)
+    print('average running time per iteration (s): {:.2f}\ntotal running time (s): {:.2f}'.format(np.mean(running_time), np.sum(running_time)))
 
 def parse_args():
     parser = argparse.ArgumentParser("Solutions to Homework 1")
