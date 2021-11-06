@@ -54,20 +54,20 @@ def read_data(args):
     return dna_strings
 
 
-def get_profile(best_motifs):
+def get_profile(best_motifs, randomized=True):
     profile = {}
     for motif in best_motifs:
         for i in np.arange(len(motif)):
             profile.setdefault(motif[i], [0] * len(motif))
             profile[motif[i]][i] += 1
 
-    # if the algorithm is gibbs, remove 0s
-    if args.algorithm == 'gibbs':
-        for i in profile:
-            profile[i] = [count + 1 for count in profile[i]]
-
     for bp in profile:
-        profile[bp] = [count / len(best_motifs) for count in profile[bp]]
+        if randomized:
+            profile[bp] = [count / len(best_motifs) for count in profile[bp]]
+        else:  # gibbs
+            profile[bp] = [(count + 1) / (len(best_motifs) + 4) for count in profile[bp]]
+
+            pass
 
     return profile
 
@@ -81,7 +81,6 @@ def get_prob_score(profile, kmer):
 
 
 def calculate_prob_of_deleted_string(dna, profile, args):
-
     prob_matrix = {}
 
     for i in np.arange(len(dna) - args.k + 1):
@@ -89,14 +88,39 @@ def calculate_prob_of_deleted_string(dna, profile, args):
         prob_score = get_prob_score(profile, kmer)
         prob_matrix[kmer] = prob_score
 
-
     return prob_matrix
 
 
 def roll_dice(probabilities):
-    random_value = np.random.randint(0, len(probabilities) - 1)
+    '''
+
+    values= probabilities.values()
+    list_of_values = list(values)
+    :param probabilities:
+    :return:
+
+    total_prob = 0;
+    for motif in probabilities:
+        total_prob += probabilities[motif]
+    '''
+
+
+    random_value = np.random.uniform(0, sum(probabilities.values()))
+
+    total = 0
+    for motif in probabilities:
+        total += probabilities[motif]
+        if total >= random_value:
+            return motif
+
+    '''
+    print(sum(list_of_values))
+
+    #random_value = np.random.choice(np.arange(len(probabilities)), p=list_of_values)
+
+    random_value = np.random.randint(0, len(probabilities))
     keys = list(probabilities)
-    return keys[random_value]
+    return keys[random_value]'''
 
 
 def get_likely_motifs(profile, dna, args):
@@ -128,18 +152,27 @@ def get_score(motifs):
     return int(score * len(motifs))
 
 
-def gibbs_sampler(dna, args):
-
+def get_initial_motifs(dna, args):
+    motifs = []
     random_index = np.random.choice(args.n - args.k + 1, 1)[0]
-    motifs = [dna_str[random_index:random_index + args.k] for dna_str in dna]
+    for dna_str in dna:
+        motifs.append(dna_str[random_index:random_index + args.k])
+        random_index = np.random.choice(args.n - args.k + 1, 1)[0]
+    return motifs
+
+
+def gibbs_sampler(dna, args):
+    motifs = get_initial_motifs(dna, args)
     best_motifs = copy.copy(motifs)
-    temp_motifs = copy.copy(motifs)
 
-    while True:
+    iter = 0
 
-        position_of_random_motif = np.random.randint(0, len(motifs) - 1)
-        temp_motifs.pop(position_of_random_motif) #removes 1 randomly motif
-        profile = get_profile(temp_motifs)
+    while iter <50:
+
+        temp_motif = copy.copy(motifs)
+        position_of_random_motif = np.random.randint(0, len(motifs))
+        temp_motif.pop(position_of_random_motif)  # removes 1 randomly motif
+        profile = get_profile(temp_motif, False)
         probabilities = calculate_prob_of_deleted_string(dna[position_of_random_motif], profile, args)
         randomly_chosen_motif = roll_dice(probabilities)
 
@@ -148,13 +181,15 @@ def gibbs_sampler(dna, args):
 
         if get_score(motifs) < get_score(best_motifs):
             best_motifs = copy.copy(motifs)
+            iter=0
+
         else:
+            iter += 1
             return best_motifs, get_score(best_motifs)
 
 
 def randomized_motif_search(dna, args):
-    random_index = np.random.choice(args.n - args.k + 1, 1)[0]
-    motifs = [dna_str[random_index:random_index + args.k] for dna_str in dna]
+    motifs = get_initial_motifs(dna, args)
     best_motifs = copy.copy(motifs)
 
     while True:
