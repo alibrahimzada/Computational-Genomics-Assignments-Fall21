@@ -127,11 +127,16 @@ def get_score(motifs):
 
     return int(score * len(motifs))
 
+def get_initial_motifs(dna, args):
+    motifs = []
+    random_index = np.random.choice(args.n - args.k + 1, 1)[0]
+    for dna_str in dna:
+        motifs.append(dna_str[random_index:random_index + args.k])
+        random_index = np.random.choice(args.n - args.k + 1, 1)[0]
+    return motifs
 
 def gibbs_sampler(dna, args):
-
-    random_index = np.random.choice(args.n - args.k + 1, 1)[0]
-    motifs = [dna_str[random_index:random_index + args.k] for dna_str in dna]
+    motifs = get_initial_motifs(dna, args)
     best_motifs = copy.copy(motifs)
     temp_motifs = copy.copy(motifs)
 
@@ -151,10 +156,8 @@ def gibbs_sampler(dna, args):
         else:
             return best_motifs, get_score(best_motifs)
 
-
 def randomized_motif_search(dna, args):
-    random_index = np.random.choice(args.n - args.k + 1, 1)[0]
-    motifs = [dna_str[random_index:random_index + args.k] for dna_str in dna]
+    motifs = get_initial_motifs(dna, args)
     best_motifs = copy.copy(motifs)
 
     while True:
