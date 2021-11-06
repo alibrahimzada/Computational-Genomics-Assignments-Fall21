@@ -3,6 +3,7 @@ import numpy as np
 import time
 import copy
 
+
 def generate_data(args):
     implanted_motif = np.random.choice(a=['a', 'c', 'g', 't'], size=args.l)
     strings = []
@@ -27,9 +28,9 @@ def generate_data(args):
 
             implanted_motif_copy[random_index] = random_bp
             total_mutations += 1
-        
-        random_dna_index = np.random.choice(a=np.arange(args.n-args.l+1), size=1)[0]
-        dna_str[random_dna_index:random_dna_index+args.l] = implanted_motif_copy
+
+        random_dna_index = np.random.choice(a=np.arange(args.n - args.l + 1), size=1)[0]
+        dna_str[random_dna_index:random_dna_index + args.l] = implanted_motif_copy
         strings.append(dna_str)
         fw.write(''.join(implanted_motif_copy) + ' {}'.format(random_dna_index) + '\n')
 
@@ -39,6 +40,7 @@ def generate_data(args):
         fw.write(''.join(dna_str) + '\n')
 
     fw.close()
+
 
 def read_data(args):
     lines = []
@@ -51,6 +53,7 @@ def read_data(args):
 
     return dna_strings
 
+
 def get_profile(best_motifs):
     profile = {}
     for motif in best_motifs:
@@ -58,10 +61,16 @@ def get_profile(best_motifs):
             profile.setdefault(motif[i], [0] * len(motif))
             profile[motif[i]][i] += 1
 
+    # if the algorithm is gibbs, remove 0s
+    if args.algorithm == 'gibbs':
+        for i in profile:
+            profile[i] = [count + 1 for count in profile[i]]
+
     for bp in profile:
         profile[bp] = [count / len(best_motifs) for count in profile[bp]]
-    
+
     return profile
+
 
 def get_prob_score(profile, kmer):
     score = 1
@@ -70,22 +79,43 @@ def get_prob_score(profile, kmer):
 
     return score
 
+
+def calculate_prob_of_deleted_string(dna, profile, args):
+
+    prob_matrix = {}
+
+    for i in np.arange(len(dna) - args.k + 1):
+        kmer = dna[i:i + args.k]
+        prob_score = get_prob_score(profile, kmer)
+        prob_matrix[kmer] = prob_score
+
+
+    return prob_matrix
+
+
+def roll_dice(probabilities):
+    random_value = np.random.randint(0, len(probabilities) - 1)
+    keys = list(probabilities)
+    return keys[random_value]
+
+
 def get_likely_motifs(profile, dna, args):
     prob_matrix = {}
     most_likely_motifs = []
 
     for i in np.arange(len(dna)):
-        for j in np.arange(len(dna[i])-args.k+1):
-            prob_matrix.setdefault(f'dna{i+1}', ['', -1])
-            kmer = dna[i][j:j+args.k]
+        for j in np.arange(len(dna[i]) - args.k + 1):
+            prob_matrix.setdefault(f'dna{i + 1}', ['', -1])
+            kmer = dna[i][j:j + args.k]
             prob_score = get_prob_score(profile, kmer)
-            if prob_score > prob_matrix[f'dna{i+1}'][1]:
-                prob_matrix[f'dna{i+1}'][0] = kmer
-                prob_matrix[f'dna{i+1}'][1] = prob_score
-        
-        most_likely_motifs.append(prob_matrix[f'dna{i+1}'][0])
+            if prob_score > prob_matrix[f'dna{i + 1}'][1]:
+                prob_matrix[f'dna{i + 1}'][0] = kmer
+                prob_matrix[f'dna{i + 1}'][1] = prob_score
+
+        most_likely_motifs.append(prob_matrix[f'dna{i + 1}'][0])
 
     return most_likely_motifs
+
 
 def get_score(motifs):
     score = 0
@@ -97,9 +127,34 @@ def get_score(motifs):
 
     return int(score * len(motifs))
 
+
+def gibbs_sampler(dna, args):
+
+    random_index = np.random.choice(args.n - args.k + 1, 1)[0]
+    motifs = [dna_str[random_index:random_index + args.k] for dna_str in dna]
+    best_motifs = copy.copy(motifs)
+    temp_motifs = copy.copy(motifs)
+
+    while True:
+
+        position_of_random_motif = np.random.randint(0, len(motifs) - 1)
+        temp_motifs.pop(position_of_random_motif) #removes 1 randomly motif
+        profile = get_profile(temp_motifs)
+        probabilities = calculate_prob_of_deleted_string(dna[position_of_random_motif], profile, args)
+        randomly_chosen_motif = roll_dice(probabilities)
+
+        motifs.pop(position_of_random_motif)
+        motifs.insert(position_of_random_motif, randomly_chosen_motif)
+
+        if get_score(motifs) < get_score(best_motifs):
+            best_motifs = copy.copy(motifs)
+        else:
+            return best_motifs, get_score(best_motifs)
+
+
 def randomized_motif_search(dna, args):
-    random_index = np.random.choice(args.n-args.k+1, 1)[0]
-    motifs = [dna_str[random_index:random_index+args.k] for dna_str in dna]
+    random_index = np.random.choice(args.n - args.k + 1, 1)[0]
+    motifs = [dna_str[random_index:random_index + args.k] for dna_str in dna]
     best_motifs = copy.copy(motifs)
 
     while True:
@@ -110,6 +165,7 @@ def randomized_motif_search(dna, args):
             best_motifs = copy.copy(motifs)
         else:
             return best_motifs, get_score(best_motifs)
+
 
 def main(args):
     if args.generate_data == 'True':
@@ -130,9 +186,13 @@ def main(args):
                 best_motifs['best motif'][0] = motifs
                 best_motifs['best motif'][1] = score
 
-        
         elif args.algorithm == 'gibbs':
-            pass
+            motifs, score = gibbs_sampler(dna_strings, args)
+            scores.append(score)
+            best_motifs.setdefault('best motif', [0, 100])
+            if score < best_motifs['best motif'][1]:
+                best_motifs['best motif'][0] = motifs
+                best_motifs['best motif'][1] = score
 
         end = time.time()
         running_time.append(end - start)
@@ -141,7 +201,9 @@ def main(args):
     print('score: {}\nbest motifs: '.format(best_motifs['best motif'][1]))
     for motif in best_motifs['best motif'][0]:
         print(motif)
-    print('average running time per iteration (s): {:.2f}\ntotal running time (s): {:.2f}'.format(np.mean(running_time), np.sum(running_time)))
+    print('average running time per iteration (s): {:.2f}\ntotal running time (s): {:.2f}'.format(np.mean(running_time),
+                                                                                                  np.sum(running_time)))
+
 
 def parse_args():
     parser = argparse.ArgumentParser("Solutions to Homework 1")
@@ -153,10 +215,12 @@ def parse_args():
     parser.add_argument('-total_iter', type=int, default=10, help='total runs for the greedy algorithm')
     parser.add_argument('-input_file', type=str, default='dna_strings.txt', help='input file')
     parser.add_argument('-generate_data', type=str, default='False', help='generate random dna strings')
-    parser.add_argument('-algorithm', type=str, default='randomized', help='motif searching algorithm i.e. gibbs, randomized')
+    parser.add_argument('-algorithm', type=str, default='gibbs',
+                        help='motif searching algorithm i.e. gibbs, randomized')
 
     return parser.parse_args()
 
+
 if __name__ == '__main__':
-    args = parse_args()    
+    args = parse_args()
     main(args)
