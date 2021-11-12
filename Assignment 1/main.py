@@ -81,8 +81,12 @@ def get_prob_score(profile, kmer):
 
 
 def calculate_prob_of_deleted_string(dna, profile, args):
-    prob_matrix = {}
+    prob_matrix = {}    # keys are the k-mers in the dna string, values equal the probability of the k-mer
 
+    '''
+    takes the k-mer and calculate its probability 
+    based on the profile and add to the prob_matrix dictionary
+    '''
     for i in np.arange(len(dna) - args.k + 1):
         kmer = dna[i:i + args.k]
         prob_score = get_prob_score(profile, kmer)
@@ -92,18 +96,11 @@ def calculate_prob_of_deleted_string(dna, profile, args):
 
 
 def roll_dice(probabilities):
+
     '''
-
-    values= probabilities.values()
-    list_of_values = list(values)
-    :param probabilities:
-    :return:
-
-    total_prob = 0;
-    for motif in probabilities:
-        total_prob += probabilities[motif]
+    this function takes probabilities dictionary as its argument and chooses the new k-mer randomly.
+    but the k-mer with the highest probability is more likely to be chosen
     '''
-
 
     random_value = np.random.uniform(0, sum(probabilities.values()))
 
@@ -112,15 +109,6 @@ def roll_dice(probabilities):
         total += probabilities[motif]
         if total >= random_value:
             return motif
-
-    '''
-    print(sum(list_of_values))
-
-    #random_value = np.random.choice(np.arange(len(probabilities)), p=list_of_values)
-
-    random_value = np.random.randint(0, len(probabilities))
-    keys = list(probabilities)
-    return keys[random_value]'''
 
 
 def get_likely_motifs(profile, dna, args):
@@ -162,30 +150,39 @@ def get_initial_motifs(dna, args):
 
 
 def gibbs_sampler(dna, args):
-    motifs = get_initial_motifs(dna, args)
-    best_motifs = copy.copy(motifs)
-
+    motifs = get_initial_motifs(dna, args)  # get 10 motifs randomly
+    best_motifs = copy.copy(motifs)         # assign the best motifs to the starting motifs.
     iter = 0
 
-    while iter <50:
+    # If the best score is not renewed 50 times in a row, the loop will end
+    while iter < 50:
 
-        temp_motif = copy.copy(motifs)
+        temp_motif = copy.copy(motifs)  # temporary list is used because 1 motif will be eliminated
+        # the index of the to-be-eliminated motif is picked at random
         position_of_random_motif = np.random.randint(0, len(motifs))
         temp_motif.pop(position_of_random_motif)  # removes 1 randomly motif
-        profile = get_profile(temp_motif, False)
+        profile = get_profile(temp_motif, False)    # get profile of the motifs
+        # probs of the k-mers in deleted dna string based on the profile are computed and stored in probabilities.
         probabilities = calculate_prob_of_deleted_string(dna[position_of_random_motif], profile, args)
+        # randomly_chosen_motif equals to the motif is determined by throwing dice from the deleted dna string
         randomly_chosen_motif = roll_dice(probabilities)
 
+        # new selected motif is added to the motifs
         motifs.pop(position_of_random_motif)
         motifs.insert(position_of_random_motif, randomly_chosen_motif)
 
+        '''
+        if the previous score is better than the best score, 
+        the best score is synchronized to the previous score and the iter is reset,
+        otherwise, iter is incremented by 1
+        '''
         if get_score(motifs) < get_score(best_motifs):
             best_motifs = copy.copy(motifs)
             iter=0
 
         else:
             iter += 1
-            return best_motifs, get_score(best_motifs)
+    return best_motifs, get_score(best_motifs)
 
 
 def randomized_motif_search(dna, args):
@@ -211,6 +208,8 @@ def main(args):
     scores = []
     best_motifs = {}
     running_time = []
+
+
     for iter in np.arange(args.total_iter):
         start = time.time()
         if args.algorithm == 'randomized':
