@@ -7,11 +7,10 @@ import copy
 def generate_data(args):
     implanted_motif = np.random.choice(a=['a', 'c', 'g', 't'], size=args.l)
     strings = []
-    fw = open('dna_strings.txt', 'w')
+    fw = open(args.input_file, 'w')
 
     for iter in range(args.t):
         dna_str = np.random.choice(a=['a', 'c', 'g', 't'], size=args.n)
-
         implanted_motif_copy = np.copy(implanted_motif)
         total_mutations = 0
 
@@ -66,8 +65,6 @@ def get_profile(best_motifs, randomized=True):
             profile[bp] = [count / len(best_motifs) for count in profile[bp]]
         else:  # gibbs
             profile[bp] = [(count + 1) / (len(best_motifs) + 4) for count in profile[bp]]
-
-            pass
 
     return profile
 
@@ -155,7 +152,7 @@ def gibbs_sampler(dna, args):
     iter = 0
 
     # If the best score is not renewed 50 times in a row, the loop will end
-    while iter < 50:
+    while iter < args.gibbs_iters:
 
         temp_motif = copy.copy(motifs)  # temporary list is used because 1 motif will be eliminated
         # the index of the to-be-eliminated motif is picked at random
@@ -182,6 +179,7 @@ def gibbs_sampler(dna, args):
 
         else:
             iter += 1
+
     return best_motifs, get_score(best_motifs)
 
 
@@ -246,10 +244,11 @@ def parse_args():
     parser.add_argument('-d', type=int, default=4, help='total mutations in motif')
     parser.add_argument('-n', type=int, default=500, help='total length of a dna string')
     parser.add_argument('-k', type=int, default=10, help='length of consensus string')
+    parser.add_argument('-gibbs_iters', type=int, default=50, help='total iterations of a gibbs run')    
     parser.add_argument('-total_iter', type=int, default=10, help='total runs for the greedy algorithm')
     parser.add_argument('-input_file', type=str, default='dna_strings.txt', help='input file')
     parser.add_argument('-generate_data', type=str, default='False', help='generate random dna strings')
-    parser.add_argument('-algorithm', type=str, default='gibbs',
+    parser.add_argument('-algorithm', type=str, default='randomized',
                         help='motif searching algorithm i.e. gibbs, randomized')
 
     return parser.parse_args()
